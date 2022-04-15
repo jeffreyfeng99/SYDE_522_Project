@@ -112,8 +112,10 @@ def process_uci(uci_full_df):
     uci_partial_df['death'] = uci_full_df['DEATH_EVENT']
     uci_partial_df['deathtime'] = death_times_all
     uci_partial_df['deathtime_multiclass'] = death_multiclass
-    
-    return uci_partial_df
+
+    uci_full_df = pd.merge(uci_partial_df, uci_full_df)
+    uci_full_df = uci_full_df.drop(columns=['serum_creatinine','serum_sodium','time','DEATH_EVENT'])
+    return uci_partial_df, uci_full_df
 
 def process_zigong(zigong_full_df):
     # Take the full zigong dataset and reduce it to the features that exist in both uci and zigong
@@ -270,33 +272,67 @@ def process_zigong(zigong_full_df):
     zigong_partial_df['deathtime'] = death_times_all
     zigong_partial_df['deathtime_multiclass'] = death_multiclass
     
-    return zigong_partial_df
+    zigong_full_df = zigong_full_df.drop(columns=['Unnamed: 0','ageCat','LVEF','platelet','creatinine.enzymatic.method','sodium','gender','diabetes','inpatient.number'])
+    zigong_full_df = pd.concat([zigong_full_df, zigong_partial_df], axis=1)
+    cols = ['DestinationDischarge', 'admission.ward','admission.way','occupation','discharge.department','type.of.heart.failure','NYHA.cardiac.function.classification','Killip.grade',
+            'type.II.respiratory.failure','consciousness','respiratory.support.','oxygen.inhalation','outcome.during.hospitalization']
+    zigong_full_df[cols] = zigong_full_df[cols].apply(lambda x: pd.factorize(x)[0] + 1)
+    
+    return zigong_partial_df, zigong_full_df
 
-def normalization(df, fields):
+# This dictionary is not used. The information is just for reference 
+equivalence_uci_to_zigong_dict = {
+    'age': 'ageCat', #int to string. '(int,int]' (categorized in decades)
+    'anaemia': 'red.blood.cell', #bool to float. red.blood.cell has reference rance as 3.5-5.5. Below is anemic??  
+    'creatinine_phosphokinase': None, #int
+    'diabetes': 'diabetes', #bool to bool
+    'ejection_fraction': 'LVEF', # int to int (may need normalization based on referance ranges)
+    'high_blood_pressure': 'systolic.blood.pressure', # bool to int
+    'high_blood_pressure': 'diastolic.blood.pressure', # bool to int
+    'platelets': 'platelet',  #int to int. need normalization. also mean.platelet.volume
+    'serum_creatinine': 'creatinine.enzymatic.method', # float to float. may need normalization
+    'serum_sodium': 'sodium', # int to float
+    'sex': 'gender', # bool to float. 0 Female, 1 Male.
+    'smoking': None, # bool
+    'time': 're.admission.time..days.from.admission.', #int to int. some N/A
+    'DEATH_EVENT': 'time.of.death..days.from.admission.', #bool to ints some N/A. Also: death.within.28.days. death.within.3.months, death.within.6.months. some are positive enen though time of death is N/A
+}
+
+
+def normalization(df, keep_fields=[], exclude_fields=[]):
     # perform min-max normalization for the desired columns of data
-
+    assert (len(keep_fields) == 0) ^ (len(exclude_fields) == 0)
     normalized_df = df
 
-    for field in fields:
-        normalized_df[field]=(df[field]-df[field].min())/(df[field].max()-df[field].min())
+    if len(keep_fields) > 0:
+        for field in keep_fields:
+            normalized_df[field]=(df[field]-df[field].min())/(df[field].max()-df[field].min())
+    else:
+        for field in df:
+            if field not in exclude_fields:
+                normalized_df[field]=(df[field]-df[field].min())/(df[field].max()-df[field].min())
     
     return normalized_df
 
 if __name__ == '__main__':
 
     zigong_full_df = pd.read_csv('./data_zigong/dat.csv')
-
     uci_full_df = pd.read_csv('./data_uci/heart_failure_clinical_records_dataset.csv')
 
-    zigong_partial_df = process_zigong(zigong_full_df)
-    uci_partial_df = process_uci(uci_full_df)
+    zigong_partial_df, zigong_full_df = process_zigong(zigong_full_df)
+    uci_partial_df, uci_full_df = process_uci(uci_full_df)
 
     uci_and_zigong_df = pd.concat([zigong_partial_df, uci_partial_df], ignore_index=True)
 
-    normalized_uci_df = normalization(uci_partial_df, ['age', 'ejection_fraction', 'platelets', 'creatinine', 'sodium', 'readmissiontime', 'deathtime'])
-    normalized_zigong_df = normalization(zigong_partial_df, ['age', 'ejection_fraction', 'platelets', 'creatinine', 'sodium', 'readmissiontime', 'deathtime'])
-    normalized_uci_and_zigong_df = normalization(uci_and_zigong_df, ['age', 'ejection_fraction', 'platelets', 'creatinine', 'sodium', 'readmissiontime', 'deathtime'])
+    normalized_zigong_full_df = normalization(zigong_full_df, exclude_fields=['readmissiontime_multiclass','deathtime_multiclass'])
+    normalized_uci_full_df = normalization(uci_full_df, exclude_fields=['readmissiontime_multiclass','deathtime_multiclass'])
 
+    normalized_uci_df = normalization(uci_partial_df, exclude_fields=['readmissiontime_multiclass','deathtime_multiclass'])
+    normalized_zigong_df = normalization(zigong_partial_df, exclude_fields=['readmissiontime_multiclass','deathtime_multiclass'])
+    normalized_uci_and_zigong_df = normalization(uci_and_zigong_df, exclude_fields=['readmissiontime_multiclass','deathtime_multiclass'])
+
+    print(normalized_zigong_full_df)
+    print(normalized_uci_full_df)
     print(normalized_uci_df)
     print(normalized_zigong_df)
     print(normalized_uci_and_zigong_df)

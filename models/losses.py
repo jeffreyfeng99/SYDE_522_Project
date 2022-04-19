@@ -34,6 +34,7 @@ class MSFELoss(nn.Module):
         self.FPE = 0
         self.FNE = 0
 
+    # TODO beforehand need to change target to either 0/1
     def mse(self, pred, target, f_positive=True):
         if f_positive:
             self.FNE = F.mse_loss(pred, target)

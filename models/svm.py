@@ -7,10 +7,15 @@ class SVM_():
         self.gamma = gamma
         self.c = c
 
-    def forward(self, data):
-        """
-        """
-        # TODO: unpack data? in init?
+        self.svm_ = svm.SVC(kernel=self.kernel, gamma=self.gamma, C=self.c)
 
-        svm_ = svm.SVC(kernel=self.kernel, gamma=self.gamma, C=self.c).fit(data)
-        return svm_
+    def fit(self, X, y):
+        """
+        """
+
+        self.svm_.fit(X, y)
+
+    def predict(self, X):
+        """
+        """
+        return self.svm_.predict(X)

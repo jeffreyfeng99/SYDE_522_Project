@@ -5,8 +5,14 @@ class KMeans_():
     def __init__(self, n_clusters):
         self.n_clusters = n_clusters
 
-    def forward(self, data):
+        self.kmeans = KMeans(n_clusters=self.n_clusters)
+
+    def fit(self, X, y):
         """
         """
-        kmeans = KMeans(n_clusters=self.n_clusters).fit(data)
-        return kmeans
+        self.kmeans.fit(X, y)
+
+    def predict(self, X):
+        """
+        """
+        return self.kmeans.predict(X)

@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import os
 
 # This dictionary is not used. The information is just for reference 
 equivalence_uci_to_zigong_dict = {
@@ -336,3 +337,10 @@ if __name__ == '__main__':
     print(normalized_uci_df)
     print(normalized_zigong_df)
     print(normalized_uci_and_zigong_df)
+
+    os.makedirs('normalized_datasets/', exist_ok=True)
+    normalized_zigong_full_df.to_csv('normalized_datasets/normalized_zigong_full_df.csv')
+    normalized_uci_full_df.to_csv('normalized_datasets/normalized_uci_full_df.csv')
+    normalized_uci_df.to_csv('normalized_datasets/normalized_uci_df.csv')
+    normalized_zigong_df.to_csv('normalized_datasets/normalized_zigong_df.csv')
+    normalized_uci_and_zigong_df.to_csv('normalized_datasets/normalized_uci_and_zigong_df.csv')

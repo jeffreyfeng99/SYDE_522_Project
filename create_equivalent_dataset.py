@@ -300,7 +300,7 @@ equivalence_uci_to_zigong_dict = {
 }
 
 
-def normalization(df, keep_fields=[], exclude_fields=[], binary=['anaamia','diabetes','high_blood_pressure','sex','smoking','death']):
+def normalization(df, keep_fields=[], exclude_fields=['readmissiontime_multiclass','deathtime_multiclass','death'], binary=['anaamia','diabetes','high_blood_pressure','sex','smoking']):
     # perform min-max normalization for the desired columns of data
     assert (len(keep_fields) == 0) ^ (len(exclude_fields) == 0)
     normalized_df = df
@@ -332,12 +332,12 @@ if __name__ == '__main__':
 
     uci_and_zigong_df = pd.concat([zigong_partial_df, uci_partial_df], ignore_index=True)
 
-    normalized_zigong_full_df = normalization(zigong_full_df, exclude_fields=['readmissiontime_multiclass','deathtime_multiclass'])
-    normalized_uci_full_df = normalization(uci_full_df, exclude_fields=['readmissiontime_multiclass','deathtime_multiclass'])
+    normalized_zigong_full_df = normalization(zigong_full_df)
+    normalized_uci_full_df = normalization(uci_full_df)
 
-    normalized_uci_df = normalization(uci_partial_df, exclude_fields=['readmissiontime_multiclass','deathtime_multiclass'])
-    normalized_zigong_df = normalization(zigong_partial_df, exclude_fields=['readmissiontime_multiclass','deathtime_multiclass'])
-    normalized_uci_and_zigong_df = normalization(uci_and_zigong_df, exclude_fields=['readmissiontime_multiclass','deathtime_multiclass'])
+    normalized_uci_df = normalization(uci_partial_df)
+    normalized_zigong_df = normalization(zigong_partial_df)
+    normalized_uci_and_zigong_df = normalization(uci_and_zigong_df)
 
     print(normalized_zigong_full_df)
     print(normalized_uci_full_df)
@@ -346,8 +346,8 @@ if __name__ == '__main__':
     print(normalized_uci_and_zigong_df)
 
     os.makedirs('normalized_datasets/', exist_ok=True)
-    normalized_zigong_full_df.to_csv('normalized_datasets/normalized_zigong_full_df.csv')
-    normalized_uci_full_df.to_csv('normalized_datasets/normalized_uci_full_df.csv')
-    normalized_uci_df.to_csv('normalized_datasets/normalized_uci_df.csv')
-    normalized_zigong_df.to_csv('normalized_datasets/normalized_zigong_df.csv')
-    normalized_uci_and_zigong_df.to_csv('normalized_datasets/normalized_uci_and_zigong_df.csv')
+    normalized_zigong_full_df.to_csv('normalized_datasets/normalized_zigong_full_df.csv', index=False)
+    normalized_uci_full_df.to_csv('normalized_datasets/normalized_uci_full_df.csv', index=False)
+    normalized_uci_df.to_csv('normalized_datasets/normalized_uci_df.csv', index=False)
+    normalized_zigong_df.to_csv('normalized_datasets/normalized_zigong_df.csv', index=False)
+    normalized_uci_and_zigong_df.to_csv('normalized_datasets/normalized_uci_and_zigong_df.csv', index=False)

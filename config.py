@@ -1,9 +1,9 @@
 from datetime import datetime
 
 # general
-train_dataset = 'normalized_datasets/normalized_uci_df.csv' # TODO arg these for sh script
-val_dataset = 'normalized_datasets/normalized_uci_df.csv'
-cross_dataset = train_dataset != val_dataset
+dataset_root = 'normalized_datasets'
+datasets = ['normalized_uci_df', 'normalized_zigong_df', 'normalized_uci_and_zigong_df']
+
 all_problems = {'readmissiontime_multiclass': 4, # TODO look into other imblearn that can work on smol ds
                 'deathtime_multiclass': 5,
                 'readmissiontime': 'all', 
@@ -11,6 +11,8 @@ all_problems = {'readmissiontime_multiclass': 4, # TODO look into other imblearn
                 'death': 2}
 
 output_json_root = f'output_jsons/{datetime.now().strftime("%m%d%Y")}'
+
+blank_model_path = 'models/blank_model.pth'
 
 k = 5
 rand_state = None

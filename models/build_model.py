@@ -15,11 +15,11 @@ def Predictor(name, n_features=9, n_classes=5, train_json_base_filename="", val_
     deep = False
     if name == 'dnn':
         deep = True
-        train_json_base_filename += f"_lr{lr}_mom{momentum}"
-        val_json_base_filename += f"_lr{lr}_mom{momentum}"
+        train_json_base_filename += f"_lr-{lr}_mom-{momentum}"
+        val_json_base_filename += f"_lr-{lr}_mom-{momentum}"
         return dnn.DNNet(n_features=n_features, n_classes=n_classes), deep, train_json_base_filename, val_json_base_filename
     elif name == 'kmeans':
-        val_json_base_filename += f"_nc{n_classes}"
+        val_json_base_filename += f"_nc-{n_classes}"
         return KMeans(n_clusters=n_classes), deep, train_json_base_filename, val_json_base_filename
     elif name == 'svm':
         return svm.SVC(), deep, train_json_base_filename, val_json_base_filename

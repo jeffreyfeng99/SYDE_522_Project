@@ -65,9 +65,3 @@ def create_dataloader(X, y, train, batch_size, num_workers):
         drop_last=True)
 
     return data_loader
-
-# TODO: create the one-to-all datasets for msfe training?
-# dataframe - read the column for admissiontime_multiclass (5 class), deathtime_multiclass (5 class), or death (0/1)
-# run entire dataset through and get confusion matrix
-# some helper to create each one-to-all confusion matrix
-# loss for each class is calculated separately, then summed

@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import os
+from sklearn.impute import SimpleImputer
 
 # This dictionary is not used. The information is just for reference 
 equivalence_uci_to_zigong_dict = {
@@ -136,8 +137,8 @@ def process_zigong(zigong_full_df):
 
     # Zigong gives left ventrical ejection fraction. About half of the values are missing. Replace with a 'normal' physiological value of 60
     zigong_partial_df['ejection_fraction'] = zigong_full_df['LVEF']
-    zigong_partial_df['ejection_fraction'] = zigong_partial_df['ejection_fraction'].replace('NA', 60)
-    zigong_partial_df['ejection_fraction'] = zigong_partial_df['ejection_fraction'].replace(np.nan, 60)
+    # zigong_partial_df['ejection_fraction'] = zigong_partial_df['ejection_fraction'].replace('NA', 60)
+    # zigong_partial_df['ejection_fraction'] = zigong_partial_df['ejection_fraction'].replace(np.nan, 60)
 
     # Zigong gives systolic and diastolic bp. To convert to high pressure boolean, compare to physiological range. Systolic more than 130 OR diastolic more than 80 is high.
     systolic_blood_pressure = zigong_full_df['systolic.blood.pressure'].to_list()
@@ -303,6 +304,10 @@ equivalence_uci_to_zigong_dict = {
 def normalization(df, keep_fields=[], exclude_fields=[], binary=['anaamia','diabetes','high_blood_pressure','sex','smoking','death']):
     # perform min-max normalization for the desired columns of data
     assert (len(keep_fields) == 0) ^ (len(exclude_fields) == 0)
+
+    for i in df.columns[df.isnull().any(axis=0)]:  # ---Applying Only on variables with NaN values)
+        df[i].fillna(df[i].mean(), inplace=True)
+
     normalized_df = df
 
     if len(keep_fields) > 0:
@@ -319,7 +324,7 @@ def normalization(df, keep_fields=[], exclude_fields=[], binary=['anaamia','diab
                     normalized_df[field] = (df[field] - 0.5) / (0.5)
                 else:
                     normalized_df[field]=(df[field]-df[field].mean())/(df[field].std())
-    
+
     return normalized_df
 
 if __name__ == '__main__':

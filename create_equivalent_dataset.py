@@ -300,18 +300,25 @@ equivalence_uci_to_zigong_dict = {
 }
 
 
-def normalization(df, keep_fields=[], exclude_fields=[]):
+def normalization(df, keep_fields=[], exclude_fields=[], binary=['anaamia','diabetes','high_blood_pressure','sex','smoking','death']):
     # perform min-max normalization for the desired columns of data
     assert (len(keep_fields) == 0) ^ (len(exclude_fields) == 0)
     normalized_df = df
 
     if len(keep_fields) > 0:
         for field in keep_fields:
-            normalized_df[field]=(df[field]-df[field].min())/(df[field].max()-df[field].min())
+
+            if field in binary:
+                normalized_df[field] = (df[field] - 0.5) / (0.5)
+            else:
+                normalized_df[field]=(df[field]-df[field].mean())/(df[field].std())
     else:
         for field in df:
             if field not in exclude_fields:
-                normalized_df[field]=(df[field]-df[field].min())/(df[field].max()-df[field].min())
+                if field in binary:
+                    normalized_df[field] = (df[field] - 0.5) / (0.5)
+                else:
+                    normalized_df[field]=(df[field]-df[field].mean())/(df[field].std())
     
     return normalized_df
 

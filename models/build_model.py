@@ -1,27 +1,36 @@
 from models import dnn
 from models import kmeans
-from models import svm
 from models import losses
 from config import *
 
-import torch.nn.functional as F
+from sklearn import svm
+from sklearn.cluster import KMeans
+import torch.nn as nn
 
 
-def Predictor(name):
+def Predictor(name, n_features=9, n_classes=5, train_json_base_filename="", val_json_base_filename=""):
+    train_json_base_filename += f"_model-{name}"
+    val_json_base_filename += f"_model-{name}"
+ 
     deep = False
     if name == 'dnn':
         deep = True
-        return dnn.DNNet(), deep
+        train_json_base_filename += f"_lr{lr}_mom{momentum}"
+        val_json_base_filename += f"_lr{lr}_mom{momentum}"
+        return dnn.DNNet(n_features=n_features, n_classes=n_classes), deep, train_json_base_filename, val_json_base_filename
     elif name == 'kmeans':
-        return kmeans.KMeans_(N_CLUSTERS), deep
+        val_json_base_filename += f"_nc{n_classes}"
+        return KMeans(n_clusters=n_classes), deep, train_json_base_filename, val_json_base_filename
     elif name == 'svm':
-        return svm.SVM_(KERNEL, GAMMA, C), deep
+        return svm.SVC(), deep, train_json_base_filename, val_json_base_filename
+    
+    
 
 def Loss(name):
     if name == 'ce':
-        return F.cross_entropy(**ce_kwargs)
+        return nn.CrossEntropyLoss(**ce_kwargs)
     elif name == 'focal':
-        return losses.FocalLoss()
+        return losses.FocalLoss(**focal_kwargs)
     elif name == 'msfe':
         return losses.MSFELoss()
     else:

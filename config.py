@@ -1,5 +1,16 @@
+from datetime import datetime
+
 # general
-dataset = 'normalized_datasets/normalized_uci_df.csv'
+train_dataset = 'normalized_datasets/normalized_uci_df.csv' # TODO arg these for sh script
+val_dataset = 'normalized_datasets/normalized_uci_df.csv'
+cross_dataset = train_dataset != val_dataset
+all_problems = {'readmissiontime_multiclass': 4, # TODO look into other imblearn that can work on smol ds
+                'deathtime_multiclass': 5,
+                'readmissiontime': 'all', 
+                'deathtime': 'all', 
+                'death': 2}
+
+output_json_root = f'output_jsons/{datetime.now().strftime("%m%d%Y")}'
 
 k = 5
 rand_state = None
@@ -7,28 +18,29 @@ rand_state = None
 # smote
 smote_kwargs = {}
 
-# pca
-pca_kwargs = {'n_components': 4}
 
 # dnn
-lr = 0.01
+lr = 0.05
 momentum = 0.9
 weight_decay = 0.0005
 num_epochs = 50
+batch_size = 16
+num_workers = 4
 
-ce_kwargs = {}
-
-# msfe
+ce_kwargs = {'label_smoothing': 0.}
 
 
 # focal
+focal_kwargs = {'alpha': 2., 'reduction': 'mean'}
 
 
 # kmeans
-N_CLUSTERS = 2
 
 
 # svm
-KERNEL = 'rbf'
-GAMMA = 0.5
-C = 0.1
+
+svm_param_grid = {
+    'kernel': ['linear', 'rbf'],
+    'gamma': [10.],
+    'C': [1.0]
+}

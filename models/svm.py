@@ -1,6 +1,5 @@
 from sklearn import svm
 
-# TODO grid search?
 class SVM_():
     def __init__(self, kernel='rbf', gamma=0.5, c=0.1):
         self.kernel = kernel

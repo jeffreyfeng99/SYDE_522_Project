@@ -7,19 +7,26 @@ import torch.nn.functional as F
 
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=.25, gamma=2, reduction='none'):
+    def __init__(self, alpha=.25, gamma=2., reduction='none'):
         super(FocalLoss, self).__init__()
         self.gamma = gamma
-        self.alpha = torch.tensor([alpha, 1-alpha]).cuda()
+        self.alpha = alpha #torch.tensor([alpha, 1-alpha]).cuda()
         self.reduction = reduction
 
     def forward(self, pred, target):
+        target_one_hot = F.one_hot(target, num_classes=4)
+        weight = torch.pow(-pred + 1.0, self.gamma)
+        focal_loss = -self.alpha * weight * F.log_softmax(pred, dim=1) #at*((1 - pt) ** self.gamma * ce_loss).mean()
+        
+        if self.reduction == 'none':
+            focal_loss = focal_loss
+        elif self.reduction == 'mean':
+            focal_loss = torch.mean(focal_loss)
+        elif self.reduction == 'sum':
+            focal_loss = torch.sum(focal_loss)
+        else:
+            raise NotImplementedError(f"invalid reduction mode: {self.reduction}")
 
-        ce_loss = F.cross_entropy(pred, target, reduction=self.reduction)
-        target = target.type(torch.long)
-        at = self.alpha.gather(0, target.data.view(-1))
-        pt = torch.exp(-ce_loss)
-        focal_loss = at*((1 - pt) ** self.gamma * ce_loss).mean()
         return focal_loss
 
 

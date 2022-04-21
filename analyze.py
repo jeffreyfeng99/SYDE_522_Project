@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+#TODO: get precision, recall, f1 from conf matrix
+
 def output_confmat(pth, data):
     df_cm = pd.DataFrame(data, index = ['negative', 'positive'],
                 columns = ['pred negative', 'pred positive'])

@@ -10,7 +10,7 @@ all_problems = {'readmissiontime_multiclass': 4, # TODO look into other imblearn
                 'deathtime': 'all', 
                 'death': 2}
 
-output_json_root = f'output_jsons/{datetime.now().strftime("%m%d%Y")}'
+output_json_root = f'output_jsons_test/{datetime.now().strftime("%m%d%Y")}'
 
 blank_model_path = 'models/blank_model.pth'
 
@@ -43,6 +43,6 @@ focal_kwargs = {'alpha': 2., 'reduction': 'mean'}
 
 svm_param_grid = {
     'kernel': ['linear', 'rbf'],
-    'gamma': [10.],
-    'C': [1.0]
+    'gamma': [0.01, 0.1, 1.0, 10.],
+    'C': [0.01, 0.1, 1.0, 10.]
 }

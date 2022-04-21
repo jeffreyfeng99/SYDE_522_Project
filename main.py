@@ -24,6 +24,11 @@ from dataloader import *
 from config import *
 
 
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(message)s',
+                    filemode='w')
+
+
 def train_deep(model, loss, train_dataloader, val_dataloader, full_test_dataloader, train_fold_json, val_fold_json):
     model.cuda()
     criterion = loss.cuda()
@@ -133,18 +138,20 @@ def train_ml(model, input_data, k, hp_tune=None, log_file=None, filename=None, j
     if hp_tune == "svm":
         svm_gridsearch_out = sys.stdout
         sys.stdout = log_file
-
+    
+        print('starting grid search')
         grid = GridSearchCV(model, svm_param_grid, cv=k, refit=True, verbose=3, n_jobs=1)
         grid.fit(X_train, y_train)
         pred_values = grid.predict(X_test)
         filename += f"_kernel-{grid.best_params_['kernel']}_gamma-{grid.best_params_['gamma']}_C-{grid.best_params_['C']}"
+        sys.stdout = svm_gridsearch_out
+        log_file.close()
+        
+        print(f'Best SVM params found: {grid.best_params_}')
 
         json['0'] = {}
         json['0']['accuracy'] = float(accuracy_score(pred_values, y_test))
         json['0']['confusion_matrix'] = [row.tolist() for row in confusion_matrix(y_test, pred_values)]
-
-        sys.stdout = svm_gridsearch_out
-        log_file.close()
         
     else:
         kf = StratifiedKFold(n_splits=k, shuffle=True, random_state=rand_state)
@@ -248,6 +255,7 @@ def main(args):
         if args.model == "svm":
             log_filepath = os.path.join(output_json_root, 'val', val_json_base_filename+'_ALL_RUNS.txt').replace('\\', '/')
             log_file = open(log_filepath, "w")
+            
         val_json_base_filename, val_json = train_ml(model, input_data, k, args.model, log_file, val_json_base_filename, val_json)
         train_json_base_filename += f".json"
         val_json_base_filename += f".json"
@@ -309,6 +317,7 @@ if __name__ == "__main__":
     parser.add_argument('--loss', type=str.lower, default='none', choices=['none', 'ce', 'focal'], metavar='L',
                         help='chooses loss function for training (none [default], ce, focal)')
     args = parser.parse_args()
+
 
     main(args)
 

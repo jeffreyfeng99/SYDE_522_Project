@@ -8,7 +8,7 @@ import logging
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold, StratifiedKFold, train_test_split, GridSearchCV
-from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_curve, auc
 from tqdm import tqdm
 
 import torch
@@ -42,7 +42,7 @@ def train_deep(model, loss, train_dataloader, val_dataloader, full_test_dataload
         # train for one epoch
         model.train()
         # train_epoch(train_dataloader, model, criterion, epoch, optimizer, train_json[str(fold)][epoch][str(epoch)])
-        loss, _, _, _, _, epoch_list = epoch_pass(train_dataloader, model, criterion, epoch, optimizer,
+        loss, _, _, _, _, _, epoch_list = epoch_pass(train_dataloader, model, criterion, epoch, optimizer,
                                                  epoch_list=train_fold_json[epoch][str(epoch)])
         train_fold_json[epoch][str(epoch)] = epoch_list
 
@@ -68,17 +68,25 @@ def validate(val_loader, test_loader, model, criterion, epoch, epoch_list):
     model.eval()
     with torch.no_grad():
         for loader in [val_loader, test_loader]:
-            loss, correct, total, pred_all, y_all, _ = epoch_pass(loader, model, criterion, epoch, train=False,
+            loss, correct, total, pred_all, y_all, probs, _ = epoch_pass(loader, model, criterion, epoch, train=False,
                                                                   epoch_list=epoch_list)
+
+            lr_precision, lr_recall, _ = precision_recall_curve(y_all, probs)
 
             epoch_list.append({
                 'val': {
                     'accuracy': float(100 * correct / total),
+                    'auc_pr': float(auc(lr_recall, lr_precision)),
+                    'precisions': [lr_precision.tolist()],
+                    'recalls': lr_recall.tolist(),
                     'loss': float(loss.cpu().data.numpy()),
                     'confusion_matrix': [row.tolist() for row in confusion_matrix(y_all, pred_all)]
                 },
                 'test': {
                     'accuracy': float(100 * correct / total),
+                    'auc_pr': float(auc(lr_recall, lr_precision)),
+                    'precisions': [lr_precision.tolist()],
+                    'recalls': lr_recall.tolist(),
                     'loss': float(loss.cpu().data.numpy()),
                     'confusion_matrix': [row.tolist() for row in confusion_matrix(y_all, pred_all)]
                 }
@@ -90,7 +98,7 @@ def validate(val_loader, test_loader, model, criterion, epoch, epoch_list):
 
 def epoch_pass(loader, model, criterion, epoch, optimizer=None, train=True, epoch_list=None):
     correct, total = 0., 0.
-    acc_all, loss_all, pred_all, y_all = [], [], [], []
+    acc_all, loss_all, pred_all, y_all, prob_all = [], [], [], [], []
     for i, (X, y) in enumerate(tqdm(loader)):
         X = X.cuda()
         y = y.cuda()
@@ -108,22 +116,29 @@ def epoch_pass(loader, model, criterion, epoch, optimizer=None, train=True, epoc
         total += y.size(0)
         correct += (predicted == y).sum().item()
 
+
         acc_all.append(float(100 * correct / total))
         loss_all.append(float(loss.cpu().data.numpy()))
         pred_all.extend(predicted.cpu().numpy())
         y_all.extend(y.cpu().numpy())
+        prob_all.extend(output.cpu().numpy())
 
         print(f'epoch: {epoch}, [iter: {i} / all {len(loader)}], accuracy: {100 * correct / total}%, loss: {loss.cpu().data.numpy()}')
 
+    lr_precision, lr_recall, _ = precision_recall_curve(y_all, output)
     if train:
         epoch_list.append({
             'accuracy': np.mean(acc_all),
-            'loss': np.mean(loss_all)
+            'auc_pr': float(auc(lr_recall, lr_precision)),
+            'precisions': [lr_precision.tolist()],
+            'recalls': lr_recall.tolist(),
+            'loss': np.mean(loss_all),
+            'confusion_matrix': [row.tolist() for row in confusion_matrix(y_all, pred_all)]
         })
     else:
         print(f'epoch: {epoch}, validation, accuracy: {100 * correct / total}%, loss: {loss.cpu().data.numpy()}')
 
-    return loss, correct, total, pred_all, y_all, epoch_list
+    return loss, correct, total, pred_all, y_all, output, epoch_list
 
 
 def train_ml(model, input_data, k, hp_tune=None, log_file=None, filename=None, json=None):
@@ -139,7 +154,12 @@ def train_ml(model, input_data, k, hp_tune=None, log_file=None, filename=None, j
         pred_values = grid.predict(X_test)
         filename += f"_kernel-{grid.best_params_['kernel']}_gamma-{grid.best_params_['gamma']}_C-{grid.best_params_['C']}"
 
+        lr_precision, lr_recall, _ = precision_recall_curve(y_test, grid.predict_proba(X_test)[:, 1])
+
         json['0'] = {}
+        json['0']['auc_pr'] = float(auc(lr_recall, lr_precision))
+        json['0']['precisions'] = [lr_precision.tolist()]
+        json['0']['recalls'] = lr_recall.tolist()
         json['0']['accuracy'] = float(accuracy_score(pred_values, y_test))
         json['0']['confusion_matrix'] = [row.tolist() for row in confusion_matrix(y_test, pred_values)]
 
@@ -155,7 +175,7 @@ def train_ml(model, input_data, k, hp_tune=None, log_file=None, filename=None, j
 
         for k, (train_index, test_index) in enumerate(kf.split(X_train, y_train)):#kf.split(X):
             X_tr, X_val = X_train.iloc[train_index, :], X_train.iloc[test_index, :]
-            y_tr, y_val = y_train[train_index], y_train[test_index]
+            y_tr, y_val = y_train.iloc[train_index], y_train.iloc[test_index]
 
             model.fit(X_tr, y_tr)
             pred_values = model.predict(X_val)
@@ -165,7 +185,11 @@ def train_ml(model, input_data, k, hp_tune=None, log_file=None, filename=None, j
             if acc > best_acc:
                 best_model = model
 
+            lr_precision, lr_recall, _ = precision_recall_curve(y_val, model.predict(X_val))
             json[str(k)] = {}
+            json[str(k)]['auc_pr'] = float(auc(lr_recall, lr_precision))
+            json[str(k)]['precisions'] = [lr_precision.tolist()]
+            json[str(k)]['recalls'] = lr_recall.tolist()
             json[str(k)]['accuracy'] = float(acc)
             json[str(k)]['confusion_matrix'] = [row.tolist() for row in confusion_matrix(y_val, pred_values)]
             
@@ -173,7 +197,11 @@ def train_ml(model, input_data, k, hp_tune=None, log_file=None, filename=None, j
 
         test_vals = best_model.predict(X_test)
         test_acc = accuracy_score(test_vals, y_test)
+        lr_precision, lr_recall, _ = precision_recall_curve(y_test, best_model.predict(X_test))
         json['test'] = {}
+        json['test']['auc_pr'] = float(auc(lr_recall, lr_precision))
+        json['test']['precisions'] = [lr_precision.tolist()]
+        json['test']['recalls'] = lr_recall.tolist()
         json['test']['accuracy'] = float(test_acc)
         json['test']['confusion_matrix'] = [row.tolist() for row in confusion_matrix(y_test, test_vals)]
 

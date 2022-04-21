@@ -22,7 +22,7 @@ def Predictor(name, n_features=9, n_classes=5, train_json_base_filename="", val_
         val_json_base_filename += f"_nc-{n_classes}"
         return KMeans(n_clusters=n_classes), deep, train_json_base_filename, val_json_base_filename
     elif name == 'svm':
-        return svm.SVC(), deep, train_json_base_filename, val_json_base_filename
+        return svm.SVC(probability=True), deep, train_json_base_filename, val_json_base_filename
     
     
 

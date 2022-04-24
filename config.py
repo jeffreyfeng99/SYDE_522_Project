@@ -2,7 +2,7 @@ from datetime import datetime
 
 # general
 dataset_root = 'normalized_datasets'
-datasets = ['normalized_uci_df', 'normalized_zigong_df', 'normalized_uci_and_zigong_df']
+datasets = ['normalizeducidf', 'normalizedzigongdf', 'normalizeduciandzigongdf']
 
 all_problems = {'readmissiontime_multiclass': 4, # TODO look into other imblearn that can work on smol ds
                 'deathtime_multiclass': 5,
@@ -10,8 +10,8 @@ all_problems = {'readmissiontime_multiclass': 4, # TODO look into other imblearn
                 'deathtime': 'all', 
                 'death': 2}
 
-output_json_root = f'output_jsons_test/{datetime.now().strftime("%m%d%Y")}'
-
+output_json_root = f'output/{datetime.now().strftime("%m%d%Y")}/jsons'
+best_model_root = f'output/{datetime.now().strftime("%m%d%Y")}/models'
 blank_model_path = 'models/blank_model.pth'
 
 k = 5

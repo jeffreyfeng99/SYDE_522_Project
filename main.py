@@ -4,6 +4,7 @@ import random
 import json
 from datetime import datetime
 import logging
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -40,68 +41,57 @@ def train_deep(model, loss, train_dataloader, val_dataloader, full_test_dataload
     # """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
     # scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
 
+    best_auc_pr = 0.
+    best_model = model
     for epoch in range(num_epochs):
-        train_fold_json.append({str(epoch): []})
-        val_fold_json.append({str(epoch): []})
+        train_fold_json.append({str(epoch): {}})
+        val_fold_json.append({str(epoch): {}})
 
         # train for one epoch
         model.train()
         # train_epoch(train_dataloader, model, criterion, epoch, optimizer, train_json[str(fold)][epoch][str(epoch)])
-        loss, _, _, _, _, _, epoch_list = epoch_pass(train_dataloader, model, criterion, epoch, optimizer,
-                                                 epoch_list=train_fold_json[epoch][str(epoch)])
-        train_fold_json[epoch][str(epoch)] = epoch_list
+        loss, _, _, _, _, _, epoch_dict = epoch_pass(train_dataloader, model, criterion, epoch, optimizer,
+                                                 epoch_dict=train_fold_json[epoch][str(epoch)])
+        train_fold_json[epoch][str(epoch)] = epoch_dict
 
         # evaluate on validation set and test on test set
         val_fold_json[epoch][str(epoch)] = validate(val_dataloader, full_test_dataloader, model, criterion,
-                                                          epoch, epoch_list=val_fold_json[epoch][str(epoch)])
+                                                          epoch, epoch_dict=val_fold_json[epoch][str(epoch)])
 
         # scheduler.step()
+        if val_fold_json[epoch][str(epoch)]['val']['auc_pr'] > best_auc_pr:
+            best_auc_pr = val_fold_json[epoch][str(epoch)]['val']['auc_pr']
+            best_model = model
 
-    return train_fold_json, val_fold_json
-#
-#
-# def train_epoch(train_loader, model, criterion, optimizer, epoch, epoch_list):
-#     # switch to train mode
-#     model.train()
-#
-#     loss, _, _, _, _, epoch_list = inference(train_loader, model, criterion, epoch, optimizer, epoch_list=epoch_list)
+    return train_fold_json, val_fold_json, best_auc_pr, best_model
 
 
-def validate(val_loader, test_loader, model, criterion, epoch, epoch_list):
+def validate(val_loader, test_loader, model, criterion, epoch, epoch_dict):
 
     # switch to evaluate mode
     model.eval()
     with torch.no_grad():
-        for loader in [val_loader, test_loader]:
-            loss, correct, total, pred_all, y_all, probs, _ = epoch_pass(loader, model, criterion, epoch, train=False,
-                                                                  epoch_list=epoch_list)
+        opts = ['val', 'test']
+        for i, loader in enumerate([val_loader, test_loader]):
+            loss, correct, total, pred_all, y_all, probs, _ = epoch_pass(loader, model, criterion, epoch, train=False)
 
             lr_precision, lr_recall, _ = precision_recall_curve(y_all, probs)
 
-            epoch_list.append({
-                'val': {
+            epoch_dict[opts[i]] = {
                     'accuracy': float(100 * correct / total),
                     'auc_pr': float(auc(lr_recall, lr_precision)),
-                    'precisions': [lr_precision.tolist()],
-                    'recalls': lr_recall.tolist(),
-                    'loss': float(loss.cpu().data.numpy()),
-                    'confusion_matrix': [row.tolist() for row in confusion_matrix(y_all, pred_all)]
-                },
-                'test': {
-                    'accuracy': float(100 * correct / total),
-                    'auc_pr': float(auc(lr_recall, lr_precision)),
-                    'precisions': [lr_precision.tolist()],
+                    'precisions': lr_precision.tolist(),
                     'recalls': lr_recall.tolist(),
                     'loss': float(loss.cpu().data.numpy()),
                     'confusion_matrix': [row.tolist() for row in confusion_matrix(y_all, pred_all)]
                 }
-            })
 
-    print(f'epoch: {epoch}, validation, accuracy: {100*correct/total}%, loss: {loss.cpu().data.numpy()}')
-    return epoch_list
+            print(f'epoch: {epoch}, {opts[i]}, accuracy: {100*correct/total}%, loss: {loss.cpu().data.numpy()}')
+
+    return epoch_dict
 
 
-def epoch_pass(loader, model, criterion, epoch, optimizer=None, train=True, epoch_list=None):
+def epoch_pass(loader, model, criterion, epoch, optimizer=None, train=True, epoch_dict=None):
     correct, total = 0., 0.
     acc_all, loss_all, pred_all, y_all, prob_all = [], [], [], [], []
     for i, (X, y) in enumerate(tqdm(loader)):
@@ -126,49 +116,55 @@ def epoch_pass(loader, model, criterion, epoch, optimizer=None, train=True, epoc
         loss_all.append(float(loss.cpu().data.numpy()))
         pred_all.extend(predicted.cpu().numpy())
         y_all.extend(y.cpu().numpy())
-        prob_all.extend(output.cpu().numpy())
+        prob_all.extend(output.detach().cpu().numpy())
 
-        print(f'epoch: {epoch}, [iter: {i} / all {len(loader)}], accuracy: {100 * correct / total}%, loss: {loss.cpu().data.numpy()}')
+        if train:
+            print(f'epoch: {epoch}, [iter: {i} / all {len(loader)}], accuracy: {100 * correct / total}%, loss: {loss.cpu().data.numpy()}')
 
-    lr_precision, lr_recall, _ = precision_recall_curve(y_all, output)
+    lr_precision, lr_recall, _ = precision_recall_curve(y_all, np.array(prob_all)[:, 1])
     if train:
-        epoch_list.append({
+        epoch_dict = {
             'accuracy': np.mean(acc_all),
             'auc_pr': float(auc(lr_recall, lr_precision)),
-            'precisions': [lr_precision.tolist()],
+            'precisions': lr_precision.tolist(),
             'recalls': lr_recall.tolist(),
             'loss': np.mean(loss_all),
             'confusion_matrix': [row.tolist() for row in confusion_matrix(y_all, pred_all)]
-        })
-    else:
-        print(f'epoch: {epoch}, validation, accuracy: {100 * correct / total}%, loss: {loss.cpu().data.numpy()}')
+        }
 
-    return loss, correct, total, pred_all, y_all, output, epoch_list
+    return loss, correct, total, pred_all, y_all, np.array(prob_all)[:, 1], epoch_dict
 
 
-def train_ml(model, input_data, k, hp_tune=None, log_file=None, filename=None, json=None):
+def train_ml(model, input_data, k, hp_tune=None, filename=None, json=None):
     
     X_train, y_train, X_test, y_test = tuple(input_data)
 
     if hp_tune == "svm":
+        log_filepath = 'temp.txt'
+        log_file = open(log_filepath, "w")
         svm_gridsearch_out = sys.stdout
-        sys.stdout = log_file
+        sys.stdout = log_file    
     
         print('starting grid search')
-        grid = GridSearchCV(model, svm_param_grid, cv=k, refit=True, verbose=3, n_jobs=1)
+        grid = GridSearchCV(model, svm_param_grid, cv=k, scoring=auc_call, refit=True, verbose=3, n_jobs=1)
         grid.fit(X_train, y_train)
         pred_values = grid.predict(X_test)
         filename += f"_kernel-{grid.best_params_['kernel']}_gamma-{grid.best_params_['gamma']}_C-{grid.best_params_['C']}"
         sys.stdout = svm_gridsearch_out
         log_file.close()
+
+        # Rename .txt file to contain best params
+        log_filepath_best_params = os.path.join(output_json_root, 'val', filename.replace('.json', '_ALL_RUNS.txt')).replace('\\', '/')
+        os.rename(log_filepath, log_filepath_best_params)
         
         print(f'Best SVM params found: {grid.best_params_}')
+        best_model = grid.best_estimator_
 
         lr_precision, lr_recall, _ = precision_recall_curve(y_test, grid.predict_proba(X_test)[:, 1])
 
         json['0'] = {}
         json['0']['auc_pr'] = float(auc(lr_recall, lr_precision))
-        json['0']['precisions'] = [lr_precision.tolist()]
+        json['0']['precisions'] = lr_precision.tolist()
         json['0']['recalls'] = lr_recall.tolist()
         json['0']['accuracy'] = float(accuracy_score(pred_values, y_test))
         json['0']['confusion_matrix'] = [row.tolist() for row in confusion_matrix(y_test, pred_values)]
@@ -177,7 +173,7 @@ def train_ml(model, input_data, k, hp_tune=None, log_file=None, filename=None, j
         kf = StratifiedKFold(n_splits=k, shuffle=True, random_state=rand_state)
 
         best_model = model
-        best_acc = 0.
+        best_auc_pr = 0.
         acc_score = []
 
         for k, (train_index, test_index) in enumerate(kf.split(X_train, y_train)):#kf.split(X):
@@ -189,25 +185,25 @@ def train_ml(model, input_data, k, hp_tune=None, log_file=None, filename=None, j
             acc = accuracy_score(pred_values, y_val)
             acc_score.append(acc)
 
-            if acc > best_acc:
-                best_model = model
-
             lr_precision, lr_recall, _ = precision_recall_curve(y_val, model.predict(X_val))
             json[str(k)] = {}
             json[str(k)]['auc_pr'] = float(auc(lr_recall, lr_precision))
-            json[str(k)]['precisions'] = [lr_precision.tolist()]
+            json[str(k)]['precisions'] = lr_precision.tolist()
             json[str(k)]['recalls'] = lr_recall.tolist()
             json[str(k)]['accuracy'] = float(acc)
             json[str(k)]['confusion_matrix'] = [row.tolist() for row in confusion_matrix(y_val, pred_values)]
+
+            if auc(lr_recall, lr_precision) > best_auc_pr:
+                best_model = model
             
         avg_acc_score = sum(acc_score) / k
 
         test_vals = best_model.predict(X_test)
         test_acc = accuracy_score(test_vals, y_test)
-        lr_precision, lr_recall, _ = precision_recall_curve(y_test, best_model.predict(X_test))
+        lr_precision, lr_recall, _ = precision_recall_curve(y_test, test_vals)
         json['test'] = {}
         json['test']['auc_pr'] = float(auc(lr_recall, lr_precision))
-        json['test']['precisions'] = [lr_precision.tolist()]
+        json['test']['precisions'] = lr_precision.tolist()
         json['test']['recalls'] = lr_recall.tolist()
         json['test']['accuracy'] = float(test_acc)
         json['test']['confusion_matrix'] = [row.tolist() for row in confusion_matrix(y_test, test_vals)]
@@ -216,22 +212,33 @@ def train_ml(model, input_data, k, hp_tune=None, log_file=None, filename=None, j
         print('Avg accuracy : {}'.format(avg_acc_score))
         print(f'Test accuracy : {test_acc}')
 
-    return filename, json
+    return filename, json, best_model
+
+
+def auc_call(estimator, X, y):
+    test_vals = estimator.predict_proba(X)
+    precision, recall, _ = precision_recall_curve(y, test_vals[:, 1])
+    return auc(recall, precision)
 
 
 def main(args):
+    print(args)
+    print('\n\n')
+
     if args.gpu >= 0:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
         gpu = args.gpu
 
     target_problem = args.problem
+    cross = args.cross
 
-    print(f'train dataset chosen: {args.train_dataset}')
     train_dataset_name = args.train_dataset
+    print(f'train dataset chosen: {train_dataset_name}')
     train_dataset = os.path.join(dataset_root, train_dataset_name+'.csv')
-    d = int(args.cross and args.train_dataset == datasets[0])
-    if args.train_dataset == datasets[-1]:
-        d = -1
+    d = int(not datasets.index(train_dataset_name)) if cross else datasets.index(train_dataset_name)
+    if cross and datasets.index(train_dataset_name) > 1:
+        cross = 0
+        d = -1 # enforce same train and val dataset for normalized combined uci and zigong 
     print(f'validation dataset chosen: {datasets[d]}')
     val_dataset_name = datasets[d]
     val_dataset = os.path.join(dataset_root, val_dataset_name+'.csv')
@@ -241,10 +248,11 @@ def main(args):
     val_json = {}
     os.makedirs(os.path.join(output_json_root, 'train'), exist_ok=True)
     os.makedirs(os.path.join(output_json_root, 'val'), exist_ok=True)
+    os.makedirs(os.path.join(best_model_root), exist_ok=True)
 
     time = datetime.now().strftime("%H-%M-%S")
-    train_json_base_filename = f"train_{time}_dataset-{train_dataset_name}_cross-{int(args.cross)}_balanced-{args.data_balance}"
-    val_json_base_filename = f"val_{time}_dataset-{val_dataset_name}_cross-{int(args.cross)}_balanced-{args.data_balance}"
+    train_json_base_filename = f"train_{time}_dataset-{train_dataset_name}_cross-{int(cross)}_balanced-{args.data_balance}"
+    val_json_base_filename = f"val_{time}_dataset-{val_dataset_name}_cross-{int(cross)}_balanced-{args.data_balance}"
 
     rand_state = random.randint(1, 10000)
 
@@ -279,32 +287,36 @@ def main(args):
     
     print('starting training')
     if not deep:
-        log_file = None
-        if args.model == "svm":
-            log_filepath = os.path.join(output_json_root, 'val', val_json_base_filename+'_ALL_RUNS.txt').replace('\\', '/')
-            log_file = open(log_filepath, "w")
-            
-        val_json_base_filename, val_json = train_ml(model, input_data, k, args.model, log_file, val_json_base_filename, val_json)
+        val_json_base_filename, val_json, best_model = train_ml(model, input_data, k, args.model, val_json_base_filename, val_json)
+        
+        best_model_filepath = os.path.join(best_model_root, f"{val_json_base_filename}.pkl").replace('\\', '/')
+        with open(best_model_filepath, "wb") as f:
+            pickle.dump(model, f)
+
         train_json_base_filename += f".json"
         val_json_base_filename += f".json"
     else:
         train_json_base_filename += f"_loss-{args.loss}.json"
         val_json_base_filename += f"_loss-{args.loss}.json"
+        best_model_filepath = os.path.join(best_model_root, 
+                            val_json_base_filename.split(".json")[0]+".pth").replace('\\', '/')
 
         full_test_dataloader = create_dataloader(X_test, y_test, False, batch_size, num_workers)
 
         torch.save(model.state_dict(), blank_model_path)
 
+        best_fold_auc_pr = 0.
         kf = StratifiedKFold(n_splits=k, shuffle=True, random_state=rand_state)
         for fold, (train_index, test_index) in enumerate(kf.split(X_train, y_train)):
             # reset model on each fold
             model.load_state_dict(torch.load(blank_model_path))
+            best_model = model
 
             # Dividing data into folds
-            X_train_fold = X_train[train_index]
-            X_val_fold = X_train[test_index]
-            y_train_fold = y_train[train_index]
-            y_val_fold = y_train[test_index]
+            X_train_fold = X_train.iloc[train_index, :]
+            X_val_fold = X_train.iloc[test_index, :]
+            y_train_fold = y_train.iloc[train_index]
+            y_val_fold = y_train.iloc[test_index]
 
             train_dataloader = create_dataloader(X_train_fold, y_train_fold, True, batch_size, num_workers)
             val_dataloader = create_dataloader(X_val_fold, y_val_fold, False, batch_size, num_workers)
@@ -313,9 +325,15 @@ def main(args):
             print(f'\n\n--------------Running fold {fold}--------------')
             train_json[str(fold)] = []
             val_json[str(fold)] = []
-            train_json[str(fold)], val_json[str(fold)] = train_deep(model, loss, train_dataloader, val_dataloader,
-                                                                    full_test_dataloader,
+            train_json[str(fold)], val_json[str(fold)], best_epoch_auc_pr, model = train_deep(model, loss, 
+                                                                    train_dataloader, val_dataloader, full_test_dataloader,
                                                                     train_json[str(fold)], val_json[str(fold)])
+            if best_epoch_auc_pr > best_fold_auc_pr:
+                best_fold_auc_pr = best_epoch_auc_pr
+                best_model = model
+
+        torch.save(best_model.state_dict(), best_model_filepath)
+
 
     train_json_filepath = os.path.join(output_json_root, 'train', train_json_base_filename).replace('\\', '/')
     val_json_filepath = os.path.join(output_json_root, 'val', val_json_base_filename).replace('\\', '/')
@@ -332,8 +350,8 @@ if __name__ == "__main__":
                         choices=['readmissiontime_multiclass', 'deathtime_multiclass',
                                  'readmissiontime', 'deathtime', 'death'],
                         help='chooses target problem to learn')
-    parser.add_argument('--train_dataset', type=str.lower, default='normalized_uci_df',
-                        choices=['normalized_uci_df', 'normalized_zigong_df', 'normalized_uci_and_zigong_df'],
+    parser.add_argument('--train_dataset', type=str.lower, default='normalizeducidf',
+                        choices=['normalizeducidf', 'normalizedzigongdf', 'normalizeduciandzigongdf'],
                         help='chooses which dataset to train on')
     parser.add_argument('--cross', action='store_true', default=False,
                         help='cross=True will choose the other dataset for test')

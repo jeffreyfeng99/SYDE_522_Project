@@ -1,8 +1,6 @@
 PYPATH="/c/Users/jeffe/anaconda3/envs/visualenv/python"
 echo "Creating dataset .csv files"
 
-# "C:\\Users\\jeffe\\anaconda3\\envs\\visualenv\python" create_equivalent_dataset.py
-
 $PYPATH create_equivalent_dataset.py
 
 # uci on uci (every)
@@ -11,68 +9,89 @@ $PYPATH create_equivalent_dataset.py
 # zigong on uci
 # uci+zigong on uci+zigong
 
-echo "\n\n##### NOW RUNNING NORMALIZED UCI DATA #####\n"
+printf "\n\n\n##### NOW RUNNING NORMALIZED UCI DATA #####\n\n"
 
 $PYPATH main.py \
 --problem death \
---train_dataset normalized_uci_df \
+--train_dataset normalizeducidf \
+--model svm 
+
+$PYPATH main.py \
+--problem death \
+--train_dataset normalizeducidf \
+--model kmeans 
+
+$PYPATH main.py \
+--problem death \
+--train_dataset normalizeducidf \
 --data_balance \
 --model svm 
 
 $PYPATH main.py \
 --problem death \
---train_dataset normalized_uci_df \
+--train_dataset normalizeducidf \
 --data_balance \
 --model kmeans 
 
 $PYPATH main.py \
 --problem death \
---train_dataset normalized_uci_df \
+--train_dataset normalizeducidf \
 --model dnn \
 --loss ce
 
 $PYPATH main.py \
 --problem death \
---train_dataset normalized_uci_df \
+--train_dataset normalizeducidf \
 --data_balance \
 --model dnn \
 --loss ce
 
 $PYPATH main.py \
 --problem death \
---train_dataset normalized_uci_df \
+--train_dataset normalizeducidf \
 --model dnn \
 --loss focal
 
-echo "\n\n##### NOW RUNNING NORMALIZED ZIGONG DATA #####\n"
+printf '\n\n\n##### NOW RUNNING NORMALIZED ZIGONG DATA #####\n\n'
 
 $PYPATH main.py \
 --problem death \
---train_dataset normalized_zigong_df \
+--train_dataset normalizedzigongdf \
+--model svm 
+
+$PYPATH main.py \
+--problem death \
+--train_dataset normalizedzigongdf \
+--model kmeans 
+
+$PYPATH main.py \
+--problem death \
+--train_dataset normalizedzigongdf \
 --data_balance \
 --model svm 
 
 $PYPATH main.py \
 --problem death \
---train_dataset normalized_zigong_df \
+--train_dataset normalizedzigongdf \
 --data_balance \
 --model kmeans 
 
 $PYPATH main.py \
 --problem death \
---train_dataset normalized_zigong_df \
+--train_dataset normalizedzigongdf \
 --model dnn \
 --loss ce
 
 $PYPATH main.py \
 --problem death \
---train_dataset normalized_zigong_df \
+--train_dataset normalizedzigongdf \
 --data_balance \
 --model dnn \
 --loss ce
 
 $PYPATH main.py \
 --problem death \
---train_dataset normalized_zigong_df \
+--train_dataset normalizedzigongdf \
 --model dnn \
 --loss focal
+

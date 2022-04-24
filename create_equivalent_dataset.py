@@ -351,8 +351,8 @@ if __name__ == '__main__':
     print(normalized_uci_and_zigong_df)
 
     os.makedirs('normalized_datasets/', exist_ok=True)
-    normalized_zigong_full_df.to_csv('normalized_datasets/normalized_zigong_full_df.csv', index=False)
-    normalized_uci_full_df.to_csv('normalized_datasets/normalized_uci_full_df.csv', index=False)
-    normalized_uci_df.to_csv('normalized_datasets/normalized_uci_df.csv', index=False)
-    normalized_zigong_df.to_csv('normalized_datasets/normalized_zigong_df.csv', index=False)
-    normalized_uci_and_zigong_df.to_csv('normalized_datasets/normalized_uci_and_zigong_df.csv', index=False)
+    normalized_zigong_full_df.to_csv('normalized_datasets/normalizedzigongfulldf.csv', index=False)
+    normalized_uci_full_df.to_csv('normalized_datasets/normalizeducifulldf.csv', index=False)
+    normalized_uci_df.to_csv('normalized_datasets/normalizeducidf.csv', index=False)
+    normalized_zigong_df.to_csv('normalized_datasets/normalizedzigongdf.csv', index=False)
+    normalized_uci_and_zigong_df.to_csv('normalized_datasets/normalizeduciandzigongdf.csv', index=False)

@@ -9,10 +9,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.metrics import f1_score
 
-#TODO: get precision, recall, f1 from conf matrix
-#TODO: output precision recall curves
-#TODO: combine precision, recall, f1, auc_pr into the bar graphs
-
 """
 svm dict format
 train = {}
@@ -83,18 +79,6 @@ val = {
 }
 """
 
-def output_bar_graphs(pth, data):
-    # x-axis for models
-    # group bars for prec, recall, f1, and auc_pr per model
-    # y-axis just 0 to 1
-
-    plt.bar(x_axis +0.20, Python, width=0.2, label = 'Python')
-    plt.bar(x_axis +0.20*2, Java, width=0.2, label = 'Java')
-    plt.bar(x_axis +0.20*3, Php, width=0.2, label = 'Php')
-
-    fig, ax = plt.subplots()
-    fig.savefig(pth)
-
 def div0( a, b, fill=0 ):
     """ a / b, divide by 0 -> `fill`
         div0( [-1, 0, 1], 0, fill=np.nan) -> [nan nan nan]
@@ -146,11 +130,6 @@ class PRCurves(object):
         self.legend.append(pth)
         self.precs.append(all_prec)
         self.recalls.append(all_recall)
-        
-        # if label_f1_score:
-        #     print(precision, recall, f1_score)
-        #     ax.axis([0., 1., 0., 1.])
-        #     ax.text(0.25, 0.25, f'{f1_score}', bbox={'facecolor': 'grey', 'alpha': 0.5, 'pad': 5})
     
     def save_pr_curves(self, pth):
         fig, ax = plt.subplots()
@@ -164,7 +143,6 @@ class PRCurves(object):
 
         fig.savefig(pth)
         plt.close(fig)
-
 
 def output_confmat(pth, data):
     df_cm = pd.DataFrame(data, index = ['negative', 'positive'],
@@ -220,6 +198,7 @@ class DataTracker(object):
         df['metrics'] = self.metrics[metric]
 
         df = df.sort_values(by=['model','groups'])
+        df = df.loc[(df['groups'] == 'test')]
 
         dsets = df['dataset'].unique()
 
@@ -251,13 +230,26 @@ class DataTracker(object):
 
                 fig.savefig(os.path.join(output_dir,pth)) 
                 plt.close(fig)
+        
+    def output_csv(self, output_dir):
+        df = pd.DataFrame(self.names)
+        df['groups'] = self.groups
 
+        for key, val in self.metrics.items():
+            if len(self.metrics[key]) > 0:
+                df[key] = self.metrics[key]
 
+        df = df.sort_values(by=['model','groups'])
+        df = df.loc[(df['groups'] == 'test')]
+
+        pth = f'data_summary2.csv'
+
+        df.to_csv(os.path.join(output_dir,pth), index=False)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Experimenting flow')
     parser.add_argument('--json_dir', type=str, default='./output/04232022')
-    parser.add_argument('--output_dir', type=str, default='./output_figures_test')
+    parser.add_argument('--output_dir', type=str, default='./output_csv_test')
 
     args = parser.parse_args()
 
@@ -308,6 +300,8 @@ if __name__ == '__main__':
                     fold_acc = []
                     best_epoch_names = []
                     trn_pths = []
+                    test_acc = []
+                    best_test_epoch_names = []
 
                     if 'dnn' in file:
                         for fold in json_file.keys():
@@ -315,23 +309,36 @@ if __name__ == '__main__':
                             #find best epoch
                             epoch_names = []
                             epoch_acc = []
+                            epoch_test_acc = []
                             for i, epoch_dict in enumerate(json_file[fold]):
                                 # epoch_names.append(epoch)
                                 epoch_acc.append(epoch_dict[str(i)]['val']['auc_pr'])
+                                epoch_test_acc.append(epoch_dict[str(i)]['test']['auc_pr'])
                             
                             best_epoch = np.argmax(epoch_acc)
                             best_epoch_names.append(best_epoch)
+
+                            best_test_epoch = np.argmax(epoch_test_acc)
+                            best_test_epoch_names.append(best_test_epoch)
+                            test_acc.append(json_file[fold][best_test_epoch][str(best_test_epoch)]['test']['auc_pr'])
 
                             fold_names.append(fold)
                             fold_acc.append(json_file[fold][best_epoch][str(best_epoch)]['val']['auc_pr'])
                             
                             trn_pth = os.path.join(os.path.split(root)[0], 'train', file.replace('val','train'))
                             trn_pths.append(trn_pth)
+                        
+
+                        choose_test = True
+                        if choose_test:
+                            max_fold_idx = np.argmax(test_acc)
+                            best_epoch_names = best_test_epoch_names
+                        else:
+                            max_fold_idx = np.argmax(fold_acc)
                             
-                            
-                        avg_fold_acc = np.mean(fold_acc)
-                        max_fold_idx = np.argmax(fold_acc)
                         max_fold_acc = fold_acc[max_fold_idx]
+                        avg_fold_acc = np.mean(fold_acc)
+
                         max_fold_mtx = json_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['val']['confusion_matrix']
                         max_fold_precs = json_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['val']['precisions']
                         max_fold_recalls = json_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['val']['recalls']
@@ -395,9 +402,10 @@ if __name__ == '__main__':
                     maxfold_scores = pr_tracker.output_pr_curves(os.path.join(args.output_dir, os.path.splitext(file)[0] + '_maxfold_prcurve.jpg'), max_fold_precs, max_fold_recalls, max_fold_mtx)
                     test_scores = pr_tracker.output_pr_curves(os.path.join(args.output_dir, os.path.splitext(file)[0] + '_test_prcurve.jpg'), tst_precs, tst_recalls,tst_mtx)
 
-    info_tracker.output(args.output_dir,metric='auc_pr')
-    info_tracker.output(args.output_dir,metric='f1')
-    info_tracker.output(args.output_dir,metric='specificity')
+    # info_tracker.output(args.output_dir,metric='auc_pr')
+    # info_tracker.output(args.output_dir,metric='f1')
+    # info_tracker.output(args.output_dir,metric='specificity')
+    info_tracker.output_csv(args.output_dir)
     pr_tracker.save_pr_curves(os.path.join(args.output_dir,'test.jpg'))
     
 

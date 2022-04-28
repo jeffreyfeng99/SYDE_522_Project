@@ -120,41 +120,87 @@ def process_matrix(matrices):
     return output
 
 class PRCurves(object):
-    def __init__(self):
+    def __init__(self, keys=['dataset','balanced','model','cross']):
+
+        self.keys = keys
+        self.headers = {key:[] for key in self.keys}
         self.legend = []
         self.precs = []
         self.recalls = []
+        self.accs = []
 
-    def output_pr_curves(self, pth, all_prec, all_recall, data, label_f1_score=True):
+    def _parse_name(self, name):
+        # this is hardcoded
+        split_name = name.split('_')
+        temp_keys = {}
         
+        for i in range(len(split_name)):
+            key = split_name[i].split('-')[0]
+            if key in self.headers.keys():
+                temp_keys[key] = split_name[i].split('-')[1]
+        
+        return temp_keys
+        
+    def add_pr_curves(self, pth, all_prec, all_recall, data, acc=None):
+        parsed_name = self._parse_name(pth) 
+
+        for key in parsed_name.keys():
+            if key in self.headers.keys():
+                self.headers[key].append(parsed_name[key])
+
         self.legend.append(pth)
         self.precs.append(all_prec)
         self.recalls.append(all_recall)
+        self.accs.append(acc)
     
     def save_pr_curves(self, pth):
-        fig, ax = plt.subplots()
+        df = pd.DataFrame(self.headers)
+        df['legend'] = self.legend
+        df['precs'] = self.precs
+        df['recalls'] = self.recalls
+        df['accs'] = self.accs
 
-        for i in range(len(self.precs)):
-            ax.plot(self.recalls[i], self.precs[i], marker='.')
+        df = df.sort_values(by=['dataset','model','balanced'])
+        dsets = df['dataset'].unique()
 
-        ax.set_title('Precision-Recall Curves of Best Models')
-        ax.set_xlabel('Recall')
-        ax.set_ylabel('Precision')
+        
 
-        fig.savefig(pth)
-        plt.close(fig)
+        for dset in dsets:
+            temp_df = df.loc[df['dataset'] == dset]        
+
+            fig, ax = plt.subplots(figsize=(10,6))
+            
+            for i in range(len(temp_df.precs.tolist())):
+                ax.plot(temp_df.recalls.tolist()[i], temp_df.precs.tolist()[i])
+
+            ax.set_title('Precision-Recall Curves')
+            ax.set_xlabel('Recall')
+            ax.set_ylabel('Precision')
+
+            temp_legend = temp_df.model.tolist()
+            temp_balanced = temp_df.balanced.tolist()
+            for i in range(len(temp_balanced)):
+                if 'True' in temp_balanced[i]:
+                    temp_legend[i] += ', SMOTE'
+
+            plt.legend(temp_legend, bbox_to_anchor=(1.04,1), loc="upper left")
+            plt.tight_layout()
+            fig.savefig(pth + f'{dset}.jpg')
+            plt.close(fig)
 
 def output_confmat(pth, data):
     df_cm = pd.DataFrame(data, index = ['negative', 'positive'],
                 columns = ['pred negative', 'pred positive'])
     cm = sn.heatmap(df_cm, annot=True)
-    fig = cm.get_figure()
+    fig = cm.figure
+
+    print(data, pth, fig)
     fig.savefig(pth) 
     plt.close(fig)
 
 class DataTracker(object):
 
-    def __init__(self, keys=['dataset','balanced','model','cross'], metrics=['acc','auc_pr','precision','recall','f1','specificity']):
+    def __init__(self, keys=['dataset','balanced','model','cross'], metrics=['acc','auc_pr','precision','recall','f1','specificity','f1_avg','sp_avg']):
 
         self.names = {key:[] for key in keys}
         self.groups = []
@@ -168,7 +214,7 @@ class DataTracker(object):
         for i in range(len(split_name)):
             key = split_name[i].split('-')[0]
             if key in self.names.keys():
-                temp_keys[key] = split_name[i].split('-')[1] + split_name[i+1].split('-')[0] ############# temprory fix for naming with underscores
+                temp_keys[key] = split_name[i].split('-')[1]
         
         return temp_keys
 
@@ -240,23 +286,27 @@ class DataTracker(object):
                 df[key] = self.metrics[key]
 
         df = df.sort_values(by=['model','groups'])
-        df = df.loc[(df['groups'] == 'test')]
 
-        pth = f'data_summary2.csv'
+        for group in ['max_fold','avg_fold','test','train']:
+            temp_df = df.loc[(df['groups'] == group)]
 
-        df.to_csv(os.path.join(output_dir,pth), index=False)
+            pth = f'data_summary_{group}.csv'
+
+            temp_df.to_csv(os.path.join(output_dir,pth), index=False)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Experimenting flow')
-    parser.add_argument('--json_dir', type=str, default='./output/04232022')
-    parser.add_argument('--output_dir', type=str, default='./output_csv_test')
+    parser.add_argument('--json_dir', type=str, default='./output/04272022_fullrunv1_combined_focalfix')
+    parser.add_argument('--output_dir', type=str, default='./output_analyze/04272022_fullrunv1_combined_focalfix')
+    parser.add_argument('--choose_test', action='store_true')
 
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
 
     info_tracker = DataTracker()
-    pr_tracker = PRCurves()
+    fold_pr_tracker = PRCurves()
+    test_pr_tracker = PRCurves()
     
     for root, dirs, files in os.walk(args.json_dir):
 
@@ -270,26 +320,35 @@ if __name__ == '__main__':
                         best_params[key.split('-')[0]] = key.split('-')[-1]
 
                 with open(file_path, 'r') as gridsearch_txt:
-                    best_params_fold_scores = []
+                    best_params_fold_scores = dict((el, []) for el in ['aucpr', 'f1-score', 'spc'])
                     best_params_strings = [f"{param}={best_params[param]}" for param in best_params.keys()]
                     for line in gridsearch_txt.readlines():
                         if all(param in line for param in best_params_strings):
-                            score_str = next(s for s in line.split(' ') if 'score=' in s)
-                            best_params_fold_scores.append(float(score_str.split('=')[-1]))
+                            test_str = [t.strip('()').split('=')[-1] for t in line.split(' ') if 'test=' in t]
+                            # score_str = next(s for s in line.split(' ') if 'score=' in s)
+                            for k, v in zip(best_params_fold_scores.keys(), test_str):
+                                best_params_fold_scores[k].append(float(v))
                         if len(best_params_fold_scores) == 5:
                             break
-                
-                avg_fold_auc_pr = np.mean(best_params_fold_scores)
-                max_fold_idx = np.argmax(best_params_fold_scores)
-                max_fold_auc_pr = best_params_fold_scores[max_fold_idx]
+
+                avg_fold_auc_pr = np.mean(best_params_fold_scores['aucpr'])
+                avg_f1 = np.mean(best_params_fold_scores['f1-score'])
+                avg_sp = np.mean(best_params_fold_scores['spc'])
+                max_fold_idx = np.argmax(best_params_fold_scores['aucpr'])
+                max_fold_auc_pr = best_params_fold_scores['aucpr'][max_fold_idx]
                 
                 conf_matrix_analyses = process_matrix([None, None, None])
                 conf_matrix_analyses['auc_pr'] = [max_fold_auc_pr, avg_fold_auc_pr, np.nan]
+                conf_matrix_analyses['f1_avg'] = (None,avg_f1,None)
+                conf_matrix_analyses['sp_avg'] = (None,avg_sp,None)
                 info_tracker.add_item(os.path.splitext(file)[0], conf_matrix_analyses, grouping=['max_fold', 'avg_fold', 'train'])
 
 
-            if file.endswith('.json'):
-                file_path = os.path.join(root,file)
+            elif file.endswith('.json'):
+                os.chdir('./')
+                file_path = os.path.join(root,file).replace('\\','/')
+
+                print(file_path, os.path.isfile(file_path))
                 json_file = json.load(open(file_path,'r'))
 
                 if len(json_file.keys()) <= 0:
@@ -302,10 +361,14 @@ if __name__ == '__main__':
                     trn_pths = []
                     test_acc = []
                     best_test_epoch_names = []
+                    fold_f1s = []
+                    fold_sps = []
 
                     if 'dnn' in file:
                         for fold in json_file.keys():
-
+                            
+                            if 'test' in fold:
+                                continue
                             #find best epoch
                             epoch_names = []
                             epoch_acc = []
@@ -314,6 +377,7 @@ if __name__ == '__main__':
                                 # epoch_names.append(epoch)
                                 epoch_acc.append(epoch_dict[str(i)]['val']['auc_pr'])
                                 epoch_test_acc.append(epoch_dict[str(i)]['test']['auc_pr'])
+
                             
                             best_epoch = np.argmax(epoch_acc)
                             best_epoch_names.append(best_epoch)
@@ -322,6 +386,10 @@ if __name__ == '__main__':
                             best_test_epoch_names.append(best_test_epoch)
                             test_acc.append(json_file[fold][best_test_epoch][str(best_test_epoch)]['test']['auc_pr'])
 
+                            confmat = process_matrix([json_file[fold][best_test_epoch][str(best_test_epoch)]['val']['confusion_matrix']])
+                            fold_f1s.append(confmat['f1'][0])
+                            fold_sps.append(confmat['specificity'][0])
+
                             fold_names.append(fold)
                             fold_acc.append(json_file[fold][best_epoch][str(best_epoch)]['val']['auc_pr'])
                             
@@ -329,8 +397,7 @@ if __name__ == '__main__':
                             trn_pths.append(trn_pth)
                         
 
-                        choose_test = True
-                        if choose_test:
+                        if args.choose_test:
                             max_fold_idx = np.argmax(test_acc)
                             best_epoch_names = best_test_epoch_names
                         else:
@@ -338,16 +405,18 @@ if __name__ == '__main__':
                             
                         max_fold_acc = fold_acc[max_fold_idx]
                         avg_fold_acc = np.mean(fold_acc)
+                        avg_f1 = np.mean(fold_f1s)
+                        avg_sp = np.mean(fold_sps)
 
                         max_fold_mtx = json_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['val']['confusion_matrix']
                         max_fold_precs = json_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['val']['precisions']
                         max_fold_recalls = json_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['val']['recalls']
 
-                        trn_file = json.load(open(trn_pths[max_fold_idx],'r'))                      
-                        max_fold_trn_acc = trn_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['auc_pr']
-                        max_fold_trn_mtx = trn_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['confusion_matrix']
-                        max_fold_trn_precs = trn_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['precisions']
-                        max_fold_trn_recalls = trn_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['recalls']
+                        # trn_file = json.load(open(trn_pths[max_fold_idx],'r'))                      
+                        # max_fold_trn_acc = trn_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['auc_pr']
+                        # max_fold_trn_mtx = trn_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['confusion_matrix']
+                        # max_fold_trn_precs = trn_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['precisions']
+                        # max_fold_trn_recalls = trn_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['recalls']
 
                         tst_acc = json_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['test']['auc_pr']
                         tst_mtx = json_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['test']['confusion_matrix']
@@ -355,8 +424,10 @@ if __name__ == '__main__':
                         tst_recalls = json_file[fold_names[max_fold_idx]][best_epoch_names[max_fold_idx]][str(best_epoch_names[max_fold_idx])]['test']['recalls']
 
                         # info_tracker.add_item(os.path.splitext(file)[0], {'acc': (max_fold_acc,avg_fold_acc,tst_acc,max_fold_trn_acc)})
-                        conf_matrix_analyses = process_matrix([max_fold_mtx, None, tst_mtx, max_fold_trn_mtx])
-                        conf_matrix_analyses['auc_pr'] = (max_fold_acc,avg_fold_acc,tst_acc,max_fold_trn_acc)
+                        conf_matrix_analyses = process_matrix([max_fold_mtx, None, tst_mtx, None])
+                        conf_matrix_analyses['auc_pr'] = (max_fold_acc,avg_fold_acc,tst_acc,None)
+                        conf_matrix_analyses['f1_avg'] = (None,avg_f1,None,None)
+                        conf_matrix_analyses['sp_avg'] = (None,avg_sp,None,None)
                         info_tracker.add_item(os.path.splitext(file)[0], conf_matrix_analyses)
 
                         # output best fold acc, avg fold accs, best test acc, trn_acc
@@ -367,8 +438,15 @@ if __name__ == '__main__':
                                 if 'test' not in fold:
                                     fold_names.append(fold)
                                     fold_acc.append(json_file[fold]['auc_pr'])
+
+                                    confmat = process_matrix([json_file[fold]['confusion_matrix']])
+                                    fold_f1s.append(confmat['f1'][0])
+                                    fold_sps.append(confmat['specificity'][0])
                             
                             avg_fold_acc = np.mean(fold_acc)
+                            avg_sp = np.mean(fold_sps)
+                            avg_f1 = np.mean(fold_f1s)
+
                             max_fold_idx = np.argmax(fold_acc)
                             max_fold_acc = fold_acc[max_fold_idx]
                             max_fold_mtx = json_file[fold_names[max_fold_idx]]['confusion_matrix']
@@ -382,32 +460,47 @@ if __name__ == '__main__':
 
                             conf_matrix_analyses = process_matrix([max_fold_mtx, None, tst_mtx, None])
                             conf_matrix_analyses['auc_pr'] = (max_fold_acc,avg_fold_acc,tst_acc,np.nan)
+                            conf_matrix_analyses['f1_avg'] = (None,avg_f1,None,None)
+                            conf_matrix_analyses['sp_avg'] = (None,avg_sp,None,None)
                             info_tracker.add_item(os.path.splitext(file)[0], conf_matrix_analyses)
                         else:
-                            max_fold_mtx = json_file['0']['confusion_matrix']
-                            max_fold_precs = json_file['0']['precisions']
-                            max_fold_recalls = json_file['0']['recalls']
-                            
-                            tst_acc = json_file['0']['auc_pr']
-                            tst_mtx = json_file['0']['confusion_matrix']
-                            tst_precs = json_file['0']['precisions']
-                            tst_recalls = json_file['0']['recalls']
+                            try:
+                                max_fold_mtx = json_file['0']['confusion_matrix']
+                                max_fold_precs = json_file['0']['precisions']
+                                max_fold_recalls = json_file['0']['recalls']
+                                
+                                tst_acc = json_file['0']['auc_pr']
+                                tst_mtx = json_file['0']['confusion_matrix']
+                                tst_precs = json_file['0']['precisions']
+                                tst_recalls = json_file['0']['recalls']
+                            except:
+                                max_fold_mtx = json_file['test']['confusion_matrix']
+                                max_fold_precs = json_file['test']['precisions']
+                                max_fold_recalls = json_file['test']['recalls']
+                                
+                                tst_acc = json_file['test']['auc_pr']
+                                tst_mtx = json_file['test']['confusion_matrix']
+                                tst_precs = json_file['test']['precisions']
+                                tst_recalls = json_file['test']['recalls']
 
                             conf_matrix_analyses = process_matrix([tst_mtx])
                             conf_matrix_analyses['auc_pr'] = [tst_acc]
+                            conf_matrix_analyses['f1_avg'] = [np.nan]
+                            conf_matrix_analyses['sp_avg'] = [np.nan]
                             info_tracker.add_item(os.path.splitext(file)[0], conf_matrix_analyses, grouping=['test'])
 
-                    output_confmat(os.path.join(args.output_dir, os.path.splitext(file)[0] + '_maxfold_confmat.jpg'), max_fold_mtx)
-                    output_confmat(os.path.join(args.output_dir, os.path.splitext(file)[0] + '_test_confmat.jpg'), tst_mtx)
-                    maxfold_scores = pr_tracker.output_pr_curves(os.path.join(args.output_dir, os.path.splitext(file)[0] + '_maxfold_prcurve.jpg'), max_fold_precs, max_fold_recalls, max_fold_mtx)
-                    test_scores = pr_tracker.output_pr_curves(os.path.join(args.output_dir, os.path.splitext(file)[0] + '_test_prcurve.jpg'), tst_precs, tst_recalls,tst_mtx)
+                    # output_confmat(os.path.join(args.output_dir, os.path.splitext(file)[0] + '_maxfold_confmat.jpg'), max_fold_mtx)
+                    # output_confmat(os.path.join(args.output_dir, os.path.splitext(file)[0] + '_test_confmat.jpg'), tst_mtx)
+                    fold_pr_tracker.add_pr_curves(os.path.splitext(file)[0], max_fold_precs, max_fold_recalls, max_fold_mtx)
+                    test_pr_tracker.add_pr_curves(os.path.splitext(file)[0], tst_precs, tst_recalls, tst_mtx, acc=tst_acc)
 
     # info_tracker.output(args.output_dir,metric='auc_pr')
     # info_tracker.output(args.output_dir,metric='f1')
     # info_tracker.output(args.output_dir,metric='specificity')
     info_tracker.output_csv(args.output_dir)
-    pr_tracker.save_pr_curves(os.path.join(args.output_dir,'test.jpg'))
-    
+    fold_pr_tracker.save_pr_curves(os.path.join(args.output_dir,'fold'))
+    test_pr_tracker.save_pr_curves(os.path.join(args.output_dir,'test'))
+
 
 
                 

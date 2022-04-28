@@ -10,8 +10,8 @@ all_problems = {'readmissiontime_multiclass': 4, # TODO look into other imblearn
                 'deathtime': 'all', 
                 'death': 2}
 
-output_json_root = f'output/{datetime.now().strftime("%m%d%Y")}/jsons'
-best_model_root = f'output/{datetime.now().strftime("%m%d%Y")}/models'
+output_json_root = f'output/{datetime.now().strftime("%m%d%Y")}_fullrunv1_cross_focalfix/jsons'
+best_model_root = f'output/{datetime.now().strftime("%m%d%Y")}_fullrunv1_cross_focalfix/models'
 blank_model_path = 'models/blank_model.pth'
 
 k = 5
@@ -27,13 +27,13 @@ momentum = 0.9
 weight_decay = 0.0005
 num_epochs = 50
 batch_size = 16
-num_workers = 4
+num_workers = 2
 
 ce_kwargs = {'label_smoothing': 0.}
 
 
 # focal
-focal_kwargs = {'alpha': 2., 'reduction': 'mean'}
+focal_kwargs = {'alpha': .25, 'reduction': 'mean'}
 
 
 # kmeans

@@ -306,6 +306,7 @@ def normalization(df, keep_fields=[], exclude_fields=['readmissiontime_multiclas
     assert (len(keep_fields) == 0) ^ (len(exclude_fields) == 0)
 
     for i in df.columns[df.isnull().any(axis=0)]:  # ---Applying Only on variables with NaN values)
+        print(df[i].name, ' missing: ', df[i].isna().sum())
         df[i].fillna(df[i].mean(), inplace=True)
 
     normalized_df = df
@@ -324,7 +325,7 @@ def normalization(df, keep_fields=[], exclude_fields=['readmissiontime_multiclas
                     normalized_df[field] = (df[field] - 0.5) / (0.5)
                 else:
                     normalized_df[field]=(df[field]-df[field].mean())/(df[field].std())
-
+    
     return normalized_df
 
 if __name__ == '__main__':
@@ -350,9 +351,9 @@ if __name__ == '__main__':
     print(normalized_zigong_df)
     print(normalized_uci_and_zigong_df)
 
-    os.makedirs('normalized_datasets/', exist_ok=True)
-    normalized_zigong_full_df.to_csv('normalized_datasets/normalizedzigongfulldf.csv', index=False)
-    normalized_uci_full_df.to_csv('normalized_datasets/normalizeducifulldf.csv', index=False)
-    normalized_uci_df.to_csv('normalized_datasets/normalizeducidf.csv', index=False)
-    normalized_zigong_df.to_csv('normalized_datasets/normalizedzigongdf.csv', index=False)
-    normalized_uci_and_zigong_df.to_csv('normalized_datasets/normalizeduciandzigongdf.csv', index=False)
+    # os.makedirs('normalized_datasets/', exist_ok=True)
+    # normalized_zigong_full_df.to_csv('normalized_datasets/normalizedzigongfulldf.csv', index=False)
+    # normalized_uci_full_df.to_csv('normalized_datasets/normalizeducifulldf.csv', index=False)
+    # normalized_uci_df.to_csv('normalized_datasets/normalizeducidf.csv', index=False)
+    # normalized_zigong_df.to_csv('normalized_datasets/normalizedzigongdf.csv', index=False)
+    # normalized_uci_and_zigong_df.to_csv('normalized_datasets/normalizeduciandzigongdf.csv', index=False)

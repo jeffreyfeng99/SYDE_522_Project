@@ -8,15 +8,15 @@ from sklearn.cluster import KMeans
 import torch.nn as nn
 
 
-def Predictor(name, n_features=9, n_classes=5, train_json_base_filename="", val_json_base_filename=""):
+def Predictor(name, n_features=9, n_classes=5, train_json_base_filename="", val_json_base_filename="", loss=""):
     train_json_base_filename += f"_model-{name}"
     val_json_base_filename += f"_model-{name}"
  
     deep = False
     if name == 'dnn':
         deep = True
-        train_json_base_filename += f"_lr-{lr}_mom-{momentum}"
-        val_json_base_filename += f"_lr-{lr}_mom-{momentum}"
+        train_json_base_filename += f"{loss}_lr-{lr}_mom-{momentum}"
+        val_json_base_filename += f"{loss}_lr-{lr}_mom-{momentum}"
         return dnn.DNNet(n_features=n_features, n_classes=n_classes), deep, train_json_base_filename, val_json_base_filename
     elif name == 'kmeans':
         val_json_base_filename += f"_nc-{n_classes}"

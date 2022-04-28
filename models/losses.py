@@ -14,9 +14,20 @@ class FocalLoss(nn.Module):
         self.reduction = reduction
 
     def forward(self, pred, target):
-        target_one_hot = F.one_hot(target, num_classes=4)
-        weight = torch.pow(-pred + 1.0, self.gamma)
-        focal_loss = -self.alpha * weight * F.log_softmax(pred, dim=1) #at*((1 - pt) ** self.gamma * ce_loss).mean()
+        target_one_hot = F.one_hot(target, num_classes=2)
+
+        CE_loss = F.cross_entropy(pred, target_one_hot.float(), reduction='none')
+        # at = self.alpha.gather(0, target.data.view(-1))
+        pt = torch.exp(-CE_loss)
+        focal_loss = self.alpha*(1-pt)**self.gamma * CE_loss
+
+        # pred = pred[:,0]
+        # weight = torch.pow(1.0-pred, self.gamma)
+        # loss = -1 * target * torch.log(pred)
+        # focal_loss = self.alpha * weight * F.log_softmax(pred, dim=1) #at*((1 - pt) ** self.gamma * ce_loss).mean()
+
+        # weight = torch.pow(1.0-pred, self.gamma)
+        # focal_loss = self.alpha * weight * F.log_softmax(pred, dim=1) #at*((1 - pt) ** self.gamma * ce_loss).mean()
         
         if self.reduction == 'none':
             focal_loss = focal_loss
